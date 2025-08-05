@@ -832,11 +832,14 @@ server <- function(input, output, session) {
       loading.ods = function(loaded.files, vegetation.available){
         # Read the "People" sheet from the Excel file and assign the data to the variable "df.people"
         # Remove the first row from the data
-        df.people = read_ods(loaded.files, sheet = "People")[-1,] %>% 
+        df.people = read_ods(loaded.files, sheet = "People")%>%
+          filter(Email != "Stable email address") |>
           filter_all(any_vars(!is.na(.)))
         # Read the "df.metadata" sheet from the Excel file and assign the data to the variable "df.metadata"
         # Remove the first row from the data
-        df.metadata = read_ods(loaded.files, sheet = "Metadata")[-1,] %>% 
+        df.metadata = read_ods(loaded.files, sheet = "Metadata") %>% 
+          filter(meta_id != "Add a unique number for each row",
+                 meta_id != "Each line in this metadata-file represents one TIME SERIES, as measured by one SENSOR.") %>%
           filter_all(any_vars(!is.na(.)))
         # Remove rows in "df.metadata" that start with specific phrases
         df.metadata <- 
@@ -908,10 +911,11 @@ server <- function(input, output, session) {
               }
             )
         }
+        
         colnames(df.metadata) = str_to_upper(colnames(df.metadata))
         colnames(df.people) = str_to_upper(colnames(df.people))
         colnames(df.ts) = str_to_upper(colnames(df.ts))
-        
+        colnames(df.ts)[grep('TIME', colnames(df.ts))] = 'TIME'
         ## stack the time series data into one column
         df.ts <- df.ts %>%
           mutate(across(.cols = -1, as.numeric)) %>%  # Convert columns to numeric if needed
@@ -948,6 +952,7 @@ server <- function(input, output, session) {
       DF = loading.ods(loaded.files = input$sheet.file$datapath[1],
                        vegetation.available = input$vegetation.available)
     }
+    
     ## here to implement parquet file format 
     else if(input$file.type == 'Parquet'){
       loading.parquet = function(loaded.files, vegetation.available){
@@ -1075,10 +1080,8 @@ server <- function(input, output, session) {
         colnames(df.metadata) = str_to_upper(colnames(df.metadata))
         colnames(df.people) = str_to_upper(colnames(df.people))
         colnames(df.ts) = str_to_upper(colnames(df.ts))
+        colnames(df.ts)[grep('TIME', colnames(df.ts))] = 'TIME'
         ## stack the time series data into one column
-        
-        
-        # Selectively convert character columns to numeric only if they are fully numeric
         df.ts <- df.ts %>%
           mutate(across(.cols = -1, as.numeric)) %>%  # Convert columns to numeric if needed
           pivot_longer(
@@ -1093,8 +1096,6 @@ server <- function(input, output, session) {
             df.ts |>
             mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER,'_',SENSOR_ID))
         } 
-        
-        
         
         DATA = 
           list(
@@ -1116,134 +1117,7 @@ server <- function(input, output, session) {
       DF = loading.parquet(loaded.files = input$sheet.file$datapath[1],
                            vegetation.available = input$vegetation.available)
       
-    }else if(input$file.type == 'ODS'){
-      loading.ods = function(loaded.files, vegetation.available){
-        # Read the "People" sheet from the Excel file and assign the data to the variable "df.people"
-        # Remove the first row from the data
-        df.people = read_ods(loaded.files, sheet = "People")[-1,] %>% 
-          filter_all(any_vars(!is.na(.)))
-        # Read the "df.metadata" sheet from the Excel file and assign the data to the variable "df.metadata"
-        # Remove the first row from the data
-        df.metadata = read_ods(loaded.files, sheet = "Metadata")[-1,] %>% 
-          filter_all(any_vars(!is.na(.)))
-        # Remove rows in "df.metadata" that start with specific phrases
-        df.metadata <- 
-          df.metadata[!grepl("^IMPORTANT GENERAL INFORMATION \\[REMOVE WHEN SUBMITTING\\]:|^Each line in this df.metadata-file represents one TIME SERIES, as measured by one SENSOR\\.|^One sensor can result in multiple time series \\(e.g., if it gets redeployed elsewhere\\)\\.|^A LOGGER is a device holding multiple SENSORS, such as the TOMST TMS4 with its 4 sensors \\(3 temperature \\+ 1 soil moisture\\)\\.|^A SITE is a specific location \\(with associated latitude and longitude\\) where a measurement is done \\(e.g. a plot\\)\\.|^An EXPERIMENT is a cohesive group of sites, following the same protocol or otherwise belonging together\\.", df.metadata$meta_id), ]
-        # Read the "Species details" sheet from the Excel file and assign the data to the variable "df.species"
-        if(vegetation.available == 'Yes'){
-          # Read the "Vegetation metadata" sheet from the Excel file and assign the data to the variable "Vegetation metadata"
-          # Remove the first row from the data
-          df.vegetation.metadata = read_ods(loaded.files, sheet = "Vegetation_metadata")
-          # [-1,] %>% 
-          #   filter_all(any_vars(!is.na(.)))
-          if (ncol(df.vegetation.metadata) > 0) {
-            # Remove the first row and filter out rows with all NA values, only if there are rows in the data frame
-            if (nrow(df.vegetation.metadata) > 0) {
-              df.vegetation.metadata <- df.vegetation.metadata[-1, ] %>% filter_all(any_vars(!is.na(.)))
-            } else {
-              cat("Data frame has no rows.\n")
-            }
-          } else {
-            cat("Data frame has no columns.\n")
-          }
-          # Read the "Vegetation data" sheet from the Excel file and assign the data to the variable "Vegetation data"
-          # Remove the first row from the data
-          df.vegetation.data = read_ods(loaded.files, sheet = "Vegetation_data")
-          # [-1,] %>% 
-          #   filter_all(any_vars(!is.na(.)))
-          # Check if the data frame has columns
-          if (ncol(df.vegetation.data) > 0) {
-            # Remove the first row and filter out rows with all NA values, only if there are rows in the data frame
-            if (nrow(df.vegetation.data) > 0) {
-              df.vegetation.data <- df.vegetation.data[-1, ] %>% filter_all(any_vars(!is.na(.)))
-            } else {
-              cat("Data frame has no rows.\n")
-            }
-          } else {
-            cat("Data frame has no columns.\n")
-          }
-          # Read the "Species details"
-          df.species = read_ods(loaded.files, sheet = "Species_details")
-          # [-1,] %>% 
-          #   filter_all(any_vars(!is.na(.)))
-          if (ncol(df.species) > 0) {
-            # Remove the first row and filter out rows with all NA values, only if there are rows in the data frame
-            if (nrow(df.species) > 0) {
-              df.vegetation.species <- df.species[-1, ] %>% filter_all(any_vars(!is.na(.)))
-            } else {
-              cat("Data frame has no rows.\n")
-            }
-          } else {
-            cat("Data frame has no columns.\n")
-          }
-        }
-        # Remove the first row from the data
-        
-        if("Raw_time_series_data" %in% list_ods_sheets(loaded.files)) {
-          # If the Excel file contains a sheet named "Raw time series data"
-          # Read the sheet and assign the data to the variable "df_fusion"
-          df.ts <- read_ods(loaded.files, sheet = "Raw_time_series_data")
-        }else{
-          # Assign the values from the column 'Raw_data_identifier*' in 
-          # df.metadata, excluding the first row, to the variable "feuilles"
-          # Create an empty data frame named "df.ts"
-          df.ts = 
-            map_df(
-              .x = df.metadata$`Raw_data_identifier*`[-1],
-              .f = ~{
-                read_ods(loaded.files, sheet = .x) |> 
-                  mutate(feuille = feuille)
-              }
-            )
-        }
-        colnames(df.metadata) = str_to_upper(colnames(df.metadata))
-        colnames(df.people) = str_to_upper(colnames(df.people))
-        colnames(df.ts) = str_to_upper(colnames(df.ts))
-        
-        ## stack the time series data into one column
-        df.ts <- df.ts %>%
-          mutate(across(.cols = -1, as.numeric)) %>%  # Convert columns to numeric if needed
-          pivot_longer(
-            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`),  
-            names_to = "SENSOR_ID",
-            values_to = "CTS_VALUES"
-          ) %>%
-          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`)
-        
-        if (length(unique(df.ts$SENSOR_ID))>1){
-          df.ts = 
-            df.ts |>
-            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER,'_',SENSOR_ID))
-        } 
-        
-        DATA = 
-          list(
-            METADATA = df.metadata,
-            PEOPLE = df.people,
-            TIMESERIES = df.ts
-          )
-        
-        if(vegetation.available == 'Yes'){
-          colnames(df.vegetation.metadata) = str_to_upper(colnames(df.vegetation.metadata))
-          colnames(df.vegetation.data) = str_to_upper(colnames(df.vegetation.data))
-          colnames(df.species) = str_to_upper(colnames(df.species))
-          DATA[['VEGETATION.METADATA']] = df.vegetation.metadata
-          DATA[['VEGETATION.DATA']] = df.vegetation.data
-          DATA[['SPECIES.DETAILS']] = df.species
-        }
-        return(DATA)
-      }
-      DF = loading.ods(loaded.files = input$sheet.file$datapath[1],
-                       vegetation.available = input$vegetation.available)
-      
-      
-      print(' parquet file format to be implemented')
-      
-      
-      
-      
-    }
-    else if(input$file.type == 'CSV'){
+    }else if(input$file.type == 'CSV'){
       loading.csv = function(metadata.file,
                              people.file,
                              timeseries.files,
@@ -1327,6 +1201,7 @@ server <- function(input, output, session) {
         colnames(df.metadata) = str_to_upper(colnames(df.metadata))
         colnames(df.people) = str_to_upper(colnames(df.people))
         colnames(df.ts) = str_to_upper(colnames(df.ts))
+        colnames(df.ts)[grep('TIME', colnames(df.ts))] = 'TIME'
         ## stack the time series data into one column
         df.ts <- df.ts %>%
           mutate(across(.cols = -1, as.numeric)) %>%  # Convert columns to numeric if needed
