@@ -1,4 +1,3 @@
-rm(list = ls())
 library(DBI)
 library(RPostgres)
 library(getPass)
