@@ -1,0 +1,239 @@
+---
+title: "Soiltemp Submission Report"
+output:
+  pdf_document:
+    latex_engine: xelatex
+keep_tex: true
+header-includes:
+  - \usepackage{fontspec}
+  - \setmainfont{Arial}
+  - \usepackage{fancyhdr}
+  - \usepackage{graphicx}
+  - \usepackage{tikz}
+  - \usepackage{geometry}
+  - \usepackage{xcolor}
+  - \usepackage{fvextra} # Ajout du package fvextra
+  - \fancyhead[L]{Titre de votre rapport}
+  - \fancyfoot[R]{\thepage}
+params:
+  #people
+  peoplename: NA
+  surname: NA
+  email: NA
+  projectname: NA
+  projectsummary: NA
+  #location
+  choiceconcoor: NA
+  continent: NA
+  country: NA
+  alt: [NA, NA]
+  lat: [NA, NA]
+  long: [NA, NA]
+  #experiments
+  expname: NA
+  manip: NA
+  insitu: NA
+  climvarmanip: NA
+  citizens: NA
+  #sites
+  sitname: NA
+  habitat: NA
+  #loggers
+  logbrand: NA
+  logtype: NA
+  logage: NA
+  logshield: NA
+  loghomeshield: NA
+  #timeseries
+  climvar: NA
+  accuracy: [NA, NA]
+  tempres: [NA, NA]
+  sensheight: [NA, NA]
+  sensrange: [NA, NA]
+  daterangets: [NA, NA]
+  licts: NA
+  #vegetation 
+  sampmeth: NA
+  multilayers: NA
+  plotsize: [NA, NA]
+  daterangeveg: [NA, NA]
+  licveg: NA
+  #queries
+  queryloc: NA
+  queryexp: NA
+  querysit: NA
+  querylog: NA
+  queryts: NA
+  queryveg: NA
+  #table
+  tableloc: NA
+  tableexp: NA
+  tablesit: NA
+  tablelog: NA
+  tablets: NA
+  tableveg: NA
+---
+
+
+Date of the ask : `r Sys.Date()`
+
+
+## Data Requester
+**Last name**: `r params$surname`  
+**Name**: `r params$peoplename`  
+**Contact**: `r params$email`  
+**Project**: `r params$projectname` 
+
+**Summary of the project**: `r params$projectsummary` 
+
+
+
+## Filter Selection 
+
+### Location: 
+```{r, echo=FALSE, results='asis', message=FALSE}
+# Fonction pour envelopper le texte avec une largeur maximale donnée
+wrap_text <- function(text, width = 80) {
+  wrapped <- strwrap(text, width = width)
+  paste(wrapped, collapse = "\n")
+}
+
+# Condition pour afficher en fonction du choix
+if (params$choiceconcoor == "1") {
+  continent_text <- wrap_text(paste("Continent: ", paste(params$continent, collapse = ", ")))
+  country_text <- wrap_text(paste("Country: ", paste(params$country, collapse = ", ")))
+  
+  cat(continent_text, "\n\n")
+  cat(country_text, "\n\n")
+} else {
+  lat_text <- wrap_text(paste("Latitude: between ", params$lat[1], " and ", params$lat[2]))
+  long_text <- wrap_text(paste("Longitude: between ", params$long[1], " and ", params$long[2]))
+  
+  cat(lat_text, "\n")
+  cat(long_text, "\n")
+}
+
+# Afficher l'altitude avec un enveloppement du texte
+alt_text <- wrap_text(paste("Altitude: between ", params$alt[1], " and ", params$alt[2]))
+cat(alt_text, "\n")
+
+```
+
+
+### Experiments:
+
+Name: `r params$expname`
+
+Manip: `r params$manip`
+
+In situ: `r params$insitu`
+
+Climatic Variable manipulated: `r params$climvarmanip`
+
+Citizens science sampling: `r params$citizens`
+
+
+### Sites:
+
+Name: `r params$sitname`
+
+Habitat: `r params$habitat`
+
+
+### Loggers:
+
+Brand: `r params$logbrand`
+
+Type: `r params$logtype`
+
+Age: `r params$logage`
+
+Covered by a shield: `r params$logshield`
+
+Homemade Shield: `r params$loghomeshield`
+
+
+### Timeseries:
+
+Climatic Variable: `r params$climvar`
+
+Accuracy of measurements: Between `r params$accuracy[1]` and `r params$accuracy[2]`
+
+Temporal resolution: Between `r params$tempres[1]` and `r params$tempres[2]`
+
+Height of measurements: Between `r params$sensheight[1]` and `r params$sensheight[2]`
+
+Range of height measured: Between `r params$sensrange[1]` and `r params$sensrange[2]`
+
+Date: Between `r params$daterangets[1]` and `r params$daterangets[2]`
+
+Licence: `r params$licts`
+
+
+### Vegetation:
+
+Sampling method: `r params$sampmeth`
+
+Several canopy layers: `r params$multilayers`
+
+Size of the plot: Between `r params$plotsize[1]` and `r params$plotsize[2]`
+
+Date: Between `r params$daterangeveg[1]` and `r params$daterangeveg[2]`
+
+Licence: `r params$licveg`
+
+
+## Visualization
+
+
+## SQL Queries
+
+**Table locations:**
+
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+`r params$queryloc`
+\end{Verbatim}
+
+
+**Table experiments:**
+
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+`r params$queryexp`
+\end{Verbatim}
+
+
+**Table sites:**
+
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+`r params$querysit`
+\end{Verbatim}
+
+
+**Table loggers:**
+
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+`r params$querylog`
+\end{Verbatim}
+
+
+**Table meta_ts:**
+
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+`r params$queryts`
+\end{Verbatim}
+
+
+**Table meta_veg_surveys:**
+
+\begin{Verbatim}[breaklines=true,breakanywhere=true]
+`r params$queryveg`
+\end{Verbatim}
+
+
+
+
+
+
+
+
+

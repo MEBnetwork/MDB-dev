@@ -1,0 +1,112 @@
+---
+title: "The Microclimate DataBase (MDB) data control"
+output: 
+  pdf_document:
+    dev: png
+params:
+  DF: NA
+  hash: NA
+  ERRORS: NA
+  report: NA
+---
+
+```{r setup, include=FALSE}
+pdf.options(useDingbats = T)
+knitr::opts_chunk$set(echo = F)
+knitr::opts_chunk$set(message = F)
+knitr::opts_chunk$set(warning = F)
+```
+
+```{r}
+set.seed(66)
+# library(maptools)
+# library(sf)
+# library(plotbiomes)
+# library(tidyverse)
+# library(rnaturalearth)
+# library(rnaturalearthdata)
+DF = params$DF
+report = params$report
+```
+
+Processing data: `r Sys.Date()`
+
+File identifier: `r params$hash`
+
+```{r}
+BEXIS.eval = (
+  length(report$METADATA$Critical$MISSING)>0 |
+  length(report$METADATA$Critical$ERRORS)>1|
+  length(report$PEOPLE$Critical$MISSING)>0 |
+  length(report$PEOPLE$Critical$ERRORS)>1
+  )
+```
+
+BEXIS Upload: `r if(BEXIS.eval == T){"Data control FAIL"}else{"Data control PASS"}`
+
+# Dataset summary
+
+Number of experiments: `r length(unique(DF$METADATA$EXPERIMENT_NAME))`
+
+Number of sites: `r length(unique(DF$METADATA$SITE_ID))`
+
+Number of rows: `r nrow(DF$METADATA)`
+
+Habitats: `r unique(DF$METADATA$HABITAT_TYPE)`
+
+## Data owners
+
+Owners: `r unique(paste(DF$PEOPLE$FIRSTNAME, DF$PEOPLE$LASTNAME))`
+
+## Data summary
+
+### Site spatial distribution
+
+```{r, echo=FALSE, out.width = '100%'}
+knitr::include_graphics('map.png')
+```
+.
+
+Blue cursors indicate your sensors location
+
+### Biome distribution
+
+```{r, echo=FALSE, out.width = '100%'}
+knitr::include_graphics('biomes.png')
+```
+.
+
+Blue cursors indicate your sensors location
+
+### Sensor type
+
+```{r, echo=FALSE, out.width = '100%'}
+knitr::include_graphics('type.png')
+```
+.
+
+Type of sensors in the dataset.
+
+### Sensor height
+
+```{r, echo=FALSE, out.width = '100%'}
+knitr::include_graphics('height.png')
+```
+.
+
+**Positive values for aboveground sensors and negative for belowground!**
+
+### Time series
+
+```{r, echo=FALSE, out.width = '100%'}
+# knitr::include_graphics('ts.png')
+```
+.
+
+Sensors time series distribution.
+
+# Errors
+
+```{r}
+    report
+```
