@@ -47,7 +47,7 @@ identify.fuzzy.matchs = function(pattern, vector, sensitivity = 1, min = 0.1){
     filter(priority >= min)
   return(matching)
 }
- ###### 1.1. functions ####
+ ###### 1. functions ####
 #  update data vector entry of database
 
 # update.database <- function(old.db, new.data) {
