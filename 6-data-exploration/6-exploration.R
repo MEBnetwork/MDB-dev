@@ -924,8 +924,3 @@ server <- function(input,output) {
 
 #### >>> 3. Launch ####
 shinyApp(ui, server)
-
-
-
-
-

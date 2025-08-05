@@ -6,7 +6,8 @@ library(curl)
 library(tidyverse)
 
 userpwd = getPass::getPass(msg = 'USER:PWD')
-setwd('1-data/bexis_download/')
+setwd('0-data/bexis_download/')
+
 h <- new_handle()
 handle_setopt(
   handle = h,
@@ -47,18 +48,18 @@ listing.bexis =
         attachment.name = L.attachments$Name)
     })
 
-soiltemp.listing = 
+MDB.listing = 
   listing.bexis |>
   filter(!is.na(project) & project == 'SoilTemp') |> 
   filter(!is.na(attachment.id))
 
-write.csv(soiltemp.listing, 'listing-bexis.csv', row.names = F)
+write.csv(MDB.listing, 'listing-bexis.csv', row.names = F)
 
-df.process$bexis.max = max(soiltemp.listing$dataset)
+df.process$bexis.max = max(MDB.listing$dataset)
 write.csv(df.process, file = 'processing-records.csv', row.names = F)
 
-# Download pdf
-pdf.files = soiltemp.listing[grep('.pdf', soiltemp.listing$attachment.name),]
+# Download all the pdf reports
+pdf.files = MDB.listing[grep('.pdf', MDB.listing$attachment.name),]
 map(.x = (nrow(pdf.files[pdf.files$dataset<=df.process$downloaded,])+1):nrow(pdf.files),
     .f = ~{
       curl_download(url = paste0("https://database.soilbon.org/api/Attachment/", 
@@ -70,8 +71,8 @@ map(.x = (nrow(pdf.files[pdf.files$dataset<=df.process$downloaded,])+1):nrow(pdf
       }
     )
 
-
-zip.files = soiltemp.listing[grep('.zip', soiltemp.listing$attachment.name),]
+# Downloading all datasets from BEXIS
+zip.files = MDB.listing[grep('.zip', MDB.listing$attachment.name),]
 map(.x = (nrow(zip.files[zip.files$dataset<=df.process$downloaded,])+1):nrow(zip.files),
     .f = ~{
       curl_download(url = paste0("https://database.soilbon.org/api/Attachment/", 

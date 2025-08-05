@@ -8,7 +8,7 @@ passphrase <- charToRaw("MDB secret code phrase")
 key <- sha256(passphrase)
 
 #### Loading the dataset ####
-data.path = '1-data/bexis_download/'
+data.path = '0-data/bexis_download/'
 listing.bexis = read.csv(paste0(data.path, 'listing-bexis.csv'))
 list.files = list.files(data.path)
 list.zip.files = list.files[grep('BEXIS.zip', list.files)]
@@ -31,8 +31,6 @@ formate.dataset.to.sql = function(i, list.zip.files, listing.bexis, data.path){
     unserialize()
   
   #### > 2. Prepare datasets for push ####
-  
-  
   #### >> 2.1. People ####
   people_data <- data.frame(
     ppl_firstname = dataRDS$DATA$PEOPLE$FIRSTNAME |> as.character(),
@@ -516,5 +514,5 @@ formate.dataset.to.sql = function(i, list.zip.files, listing.bexis, data.path){
   return(DATASETS)
 }
 
-
+# To open a dataset: 
 # DATASETS = formate.dataset.to.sql(i=1, list.zip.files, listing.bexis, data.path)
