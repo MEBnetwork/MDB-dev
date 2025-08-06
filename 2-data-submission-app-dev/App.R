@@ -780,10 +780,10 @@ server <- function(input, output, session) {
           # Create an empty data frame named "df.ts"
           df.ts = 
             map_df(
-              .x = df.metadata$`Raw_data_identifier*`[-1],
+              .x = df.metadata$`Raw_data_identifier`,
               .f = ~{
                 read_excel(loaded.files, sheet = .x) |> 
-                  mutate(feuille = feuille)
+                  mutate(Raw_data_identifier = .x)
               }
             )
         }
@@ -904,10 +904,10 @@ server <- function(input, output, session) {
           # Create an empty data frame named "df.ts"
           df.ts = 
             map_df(
-              .x = df.metadata$`Raw_data_identifier*`[-1],
+              .x = df.metadata$`Raw_data_identifier`,
               .f = ~{
                 read_ods(loaded.files, sheet = .x) |> 
-                  mutate(feuille = feuille)
+                  mutate(Raw_data_identifier = .x)
               }
             )
         }
@@ -1069,10 +1069,10 @@ server <- function(input, output, session) {
           # Create an empty data frame named "df.ts"
           df.ts = 
             map_df(
-              .x = df.metadata$`Raw_data_identifier`[-1],
+              .x = df.metadata$`Raw_data_identifier`,
               .f = ~{
                 read_parquet(loaded.files, sheet = .x) |> 
-                  mutate(feuille = feuille)
+                  mutate(Raw_data_identifier = .x)
               }
             )
         }
@@ -1191,10 +1191,10 @@ server <- function(input, output, session) {
         } else {
           df.ts =
             map_df(
-              .x = df.metadata$`Raw_data_identifier*`[-1],
+              .x = df.metadata$`Raw_data_identifier`,
               .f = ~{
                 read_csv(.x) |>
-                  mutate(feuille = .x)
+                  mutate(Raw_data_identifier = .x)
               }
             )
         }
