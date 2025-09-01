@@ -18,6 +18,7 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(trustedtimestamping)
 library(DT)
+library(dplyr)
 
 options(shiny.maxRequestSize = 100 * 1024^2)
 
@@ -436,7 +437,7 @@ ui <- dashboardPage(
     sidebarMenu(
       tags$footer(
         style = "background-color: #0F4476; padding: 10px; text-align: center; position: fixed; bottom: 0; width: 100%;",
-        "© 2025 MDB. All rights reserved. | ",
+        "B) 2025 MDB. All rights reserved. | ",
         tags$a(href = "https://meb-network.com/", "Visit our website"),
         " | Contact: ",
         tags$a(href = "mailto:MEB-network@outlook.com", "MEB-network@outlook.com")
@@ -794,19 +795,23 @@ server <- function(input, output, session) {
         colnames(df.ts)[grep('TIME', colnames(df.ts))] = 'TIME'
         ## stack the time series data into one column
         df.ts <- df.ts %>%
-          mutate(across(.cols = -1, as.numeric)) %>%  # Convert columns to numeric if needed
           pivot_longer(
-            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`),  
+            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, TIME),  
             names_to = "SENSOR_ID",
             values_to = "CTS_VALUES"
           ) %>%
-          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`)
+          mutate(
+            CTS_VALUES = as.numeric(CTS_VALUES),   # b only values to numeric
+            SENSOR_ID = as.character(SENSOR_ID),   # b keep sensor as character
+            RAW_DATA_IDENTIFIER = as.character(RAW_DATA_IDENTIFIER)  # b keep identifier as character
+          ) %>%
+          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, TIME)
         
-        if (length(unique(df.ts$SENSOR_ID))>1){
-          df.ts = 
-            df.ts |>
-            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER,'_',SENSOR_ID))
-        } 
+        if (length(unique(df.ts$SENSOR_ID)) > 1) {
+          df.ts <- df.ts %>%
+            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER, "_", SENSOR_ID))
+        }
+        
         
         DATA = 
           list(
@@ -814,6 +819,18 @@ server <- function(input, output, session) {
             PEOPLE = df.people,
             TIMESERIES = df.ts
           )
+        
+        # Compare RAW_DATA_IDENTIFIER between metadata and timeseries
+        unmatched <- setdiff(df.ts$RAW_DATA_IDENTIFIER, df.metadata$RAW_DATA_IDENTIFIER)
+        
+        if (length(unmatched) > 0) {
+          cat("??? Unmatched RAW_DATA_IDENTIFIER found:\n")
+          print(unmatched)
+          stop("Stopping: Some RAW_DATA_IDENTIFIER values in df.ts are missing in df.metadata")
+        } else {
+          cat("??? All RAW_DATA_IDENTIFIER values match between df.ts and df.metadata.\n")
+        }
+        
         
         if(vegetation.available == 'Yes'){
           colnames(df.vegetation.metadata) = str_to_upper(colnames(df.vegetation.metadata))
@@ -918,19 +935,23 @@ server <- function(input, output, session) {
         colnames(df.ts)[grep('TIME', colnames(df.ts))] = 'TIME'
         ## stack the time series data into one column
         df.ts <- df.ts %>%
-          mutate(across(.cols = -1, as.numeric)) %>%  # Convert columns to numeric if needed
           pivot_longer(
-            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`),  
+            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, TIME),  
             names_to = "SENSOR_ID",
             values_to = "CTS_VALUES"
           ) %>%
-          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`)
+          mutate(
+            CTS_VALUES = as.numeric(CTS_VALUES),   # only values to numeric
+            SENSOR_ID = as.character(SENSOR_ID),   # keep sensor as character
+            RAW_DATA_IDENTIFIER = as.character(RAW_DATA_IDENTIFIER)  # keep identifier as character
+          ) %>%
+          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, TIME)
         
-        if (length(unique(df.ts$SENSOR_ID))>1){
-          df.ts = 
-            df.ts |>
-            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER,'_',SENSOR_ID))
-        } 
+        if (length(unique(df.ts$SENSOR_ID)) > 1) {
+          df.ts <- df.ts %>%
+            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER, "_", SENSOR_ID))
+        }
+        
         
         DATA = 
           list(
@@ -938,6 +959,17 @@ server <- function(input, output, session) {
             PEOPLE = df.people,
             TIMESERIES = df.ts
           )
+        
+        # Compare RAW_DATA_IDENTIFIER between metadata and timeseries
+        unmatched <- setdiff(df.ts$RAW_DATA_IDENTIFIER, df.metadata$RAW_DATA_IDENTIFIER)
+        
+        if (length(unmatched) > 0) {
+          cat("??? Unmatched RAW_DATA_IDENTIFIER found:\n")
+          print(unmatched)
+          stop("Stopping: Some RAW_DATA_IDENTIFIER values in df.ts are missing in df.metadata")
+        } else {
+          cat("??? All RAW_DATA_IDENTIFIER values match between df.ts and df.metadata.\n")
+        }
         
         if(vegetation.available == 'Yes'){
           colnames(df.vegetation.metadata) = str_to_upper(colnames(df.vegetation.metadata))
@@ -1055,14 +1087,17 @@ server <- function(input, output, session) {
         }
         # Remove the first row from the data
         
-        if ("Raw time series" %in% arrow::read_parquet(loaded.files)$SheetName) {
-          # If the Excel file contains a sheet named "Raw time series data"
-          # Read the sheet and assign the data to the variable "df_fusion"
+        # Check if the "Raw time series" or "Raw time series data" exists in the SheetName column
+        if ("Raw time series" %in% arrow::read_parquet(loaded.files)$SheetName | 
+            "Raw time series data" %in% arrow::read_parquet(loaded.files)$SheetName) {
+          
+          # Read the data and filter for "Raw time series" and "Raw time series data"
           df.ts <- arrow::read_parquet(loaded.files) %>%
-            filter(SheetName == "Raw time series")%>%
-            filter(!if_all(everything(), is.na))%>%
-            dplyr:: select(where(~ !all(is.na(.))))%>%
-            dplyr::select(-SheetName) # Exclude the 'SheetName' colum 
+            # mutate(SheetName = ifelse("SheetName" %in% colnames(.), SheetName, NA_character_)) %>%  # Ensure SheetName exists
+            filter(SheetName %in% c("Raw time series", "Raw time series data")) %>%  # Keep relevant sheets
+            filter(!if_all(everything(), is.na)) %>%  # Remove completely empty rows
+            dplyr::select(where(~ !all(is.na(.)))) %>%  # Remove empty columns
+            dplyr::select(-SheetName)  # Drop SheetName column
         } else {
           # Assign the values from the column 'Raw_data_identifier*' in 
           # df.metadata, excluding the first row, to the variable "feuilles"
@@ -1083,19 +1118,23 @@ server <- function(input, output, session) {
         colnames(df.ts)[grep('TIME', colnames(df.ts))] = 'TIME'
         ## stack the time series data into one column
         df.ts <- df.ts %>%
-          mutate(across(.cols = -1, as.numeric)) %>%  # Convert columns to numeric if needed
           pivot_longer(
-            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`),  
+            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, TIME),  
             names_to = "SENSOR_ID",
             values_to = "CTS_VALUES"
           ) %>%
-          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`)
+          mutate(
+            CTS_VALUES = as.numeric(CTS_VALUES),   # b only values to numeric
+            SENSOR_ID = as.character(SENSOR_ID),   # b keep sensor as character
+            RAW_DATA_IDENTIFIER = as.character(RAW_DATA_IDENTIFIER)  # b keep identifier as character
+          ) %>%
+          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, TIME)
         
-        if (length(unique(df.ts$SENSOR_ID))>1){
-          df.ts = 
-            df.ts |>
-            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER,'_',SENSOR_ID))
-        } 
+        if (length(unique(df.ts$SENSOR_ID)) > 1) {
+          df.ts <- df.ts %>%
+            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER, "_", SENSOR_ID))
+        }
+        
         
         DATA = 
           list(
@@ -1103,6 +1142,17 @@ server <- function(input, output, session) {
             PEOPLE = df.people,
             TIMESERIES = df.ts
           )
+        
+        # Compare RAW_DATA_IDENTIFIER between metadata and timeseries
+        unmatched <- setdiff(df.ts$RAW_DATA_IDENTIFIER, df.metadata$RAW_DATA_IDENTIFIER)
+        
+        if (length(unmatched) > 0) {
+          cat("??? Unmatched RAW_DATA_IDENTIFIER found:\n")
+          print(unmatched)
+          stop("Stopping: Some RAW_DATA_IDENTIFIER values in df.ts are missing in df.metadata")
+        } else {
+          cat("??? All RAW_DATA_IDENTIFIER values match between df.ts and df.metadata.\n")
+        }
         
         if(vegetation.available == 'Yes'){
           colnames(df.vegetation.metadata) = str_to_upper(colnames(df.vegetation.metadata))
@@ -1204,19 +1254,23 @@ server <- function(input, output, session) {
         colnames(df.ts)[grep('TIME', colnames(df.ts))] = 'TIME'
         ## stack the time series data into one column
         df.ts <- df.ts %>%
-          mutate(across(.cols = -1, as.numeric)) %>%  # Convert columns to numeric if needed
           pivot_longer(
-            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`),  
+            cols = -c(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, TIME),  
             names_to = "SENSOR_ID",
             values_to = "CTS_VALUES"
           ) %>%
-          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, `TIME`)
+          mutate(
+            CTS_VALUES = as.numeric(CTS_VALUES),   #  only values to numeric
+            SENSOR_ID = as.character(SENSOR_ID),   # keep sensor as character
+            RAW_DATA_IDENTIFIER = as.character(RAW_DATA_IDENTIFIER)  # keep identifier as character
+          ) %>%
+          arrange(RAW_DATA_IDENTIFIER, YEAR, MONTH, DAY, TIME)
         
-        if (length(unique(df.ts$SENSOR_ID))>1){
-          df.ts = 
-            df.ts |>
-            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER,'_',SENSOR_ID))
-        } 
+        if (length(unique(df.ts$SENSOR_ID)) > 1) {
+          df.ts <- df.ts %>%
+            mutate(RAW_DATA_IDENTIFIER = paste0(RAW_DATA_IDENTIFIER, "_", SENSOR_ID))
+        }
+        
         
         DATA = 
           list(
@@ -1224,6 +1278,17 @@ server <- function(input, output, session) {
             PEOPLE = df.people,
             TIMESERIES = df.ts
           )
+        
+        # Compare RAW_DATA_IDENTIFIER between metadata and timeseries
+        unmatched <- setdiff(df.ts$RAW_DATA_IDENTIFIER, df.metadata$RAW_DATA_IDENTIFIER)
+        
+        if (length(unmatched) > 0) {
+          cat("??? Unmatched RAW_DATA_IDENTIFIER found:\n")
+          print(unmatched)
+          stop("Stopping: Some RAW_DATA_IDENTIFIER values in df.ts are missing in df.metadata")
+        } else {
+          cat("??? All RAW_DATA_IDENTIFIER values match between df.ts and df.metadata.\n")
+        }
         
         if(vegetation.available == 'Yes'){
           colnames(df.vegetation.metadata) = str_to_upper(colnames(df.vegetation.metadata))
@@ -1504,15 +1569,15 @@ server <- function(input, output, session) {
     DF$VEGETATION.METADATA$DATE = ymd(paste0(DF$VEGETATION.METADATA$OBSERVATION_DATE_YEAR,'-',
                                              DF$VEGETATION.METADATA$OBSERVATION_DATE_MONTH,'-',
                                              DF$VEGETATION.METADATA$OBSERVATION_DATE_DAY))
-    # FIXME Need to check the date build -> errors in parse 
-    DF$TIMESERIES = 
-      DF$TIMESERIES |> 
-      mutate(RAW_DATA_IDENTIFIER = as.character(RAW_DATA_IDENTIFIER)) |>
-      left_join(DF$METADATA |> 
-                  select(`RAW_DATA_IDENTIFIER`, 
-                         MICROCLIMATE_MEASUREMENT)|> 
-                  mutate(RAW_DATA_IDENTIFIER = as.character(RAW_DATA_IDENTIFIER)))
-    
+    # FIXME Need to check the date build -> errors in parse
+    DF$TIMESERIES =
+      DF$TIMESERIES |>
+      dplyr::mutate(RAW_DATA_IDENTIFIER = as.character(RAW_DATA_IDENTIFIER)) |>
+      left_join(DF$METADATA |>
+                  dplyr::select(`RAW_DATA_IDENTIFIER`,
+                         MICROCLIMATE_MEASUREMENT)|>
+                  dplyr::mutate(RAW_DATA_IDENTIFIER = as.character(RAW_DATA_IDENTIFIER)))
+    # 
     output$timeseries <- renderPlot({
       p.ts = 
         ggplot(data = DF$TIMESERIES,
@@ -1705,25 +1770,50 @@ server <- function(input, output, session) {
       contentType = "application/zip"
     )
     ##### >>> 4.5.2. Report #####
+    # output$report <- downloadHandler(
+    #   filename = function() {paste(file_name,"-report.pdf")},
+    #   content = function(file) {
+    #     # Copy the report file to a temporary directory before processing it, in
+    #     # case we don't have write permissions to the current working dir (which
+    #     # can happen when deployed).
+    #     tempReport <- file.path(temp_folder, "report.Rmd")
+    #     file.copy("report.Rmd", 
+    #               tempReport, 
+    #               overwrite = TRUE)
+    #     # Set up parameters to pass to Rmd document
+    #     params <- list(DF = DF, 
+    #                    hash = hash, 
+    #                    ERRORS = L.ERRORS,
+    #                    report = report)
+    #     
+    #     # Knit the document, passing in the `params` list, and eval it in a
+    #     # child of the global environment (this isolates the code in the document
+    #     # from the code in this app).
+    #     rmarkdown::render(tempReport, 
+    #                       params = params,
+    #                       output_file = file,
+    #                       output_format = rmarkdown::pdf_document(),
+    #                       envir = new.env(parent = globalenv()),
+    #                       knit_root_dir = temp_folder
+    #     )
+    #   }
+    # )
     output$report <- downloadHandler(
-      filename = function() {paste(file_name,"-report.pdf")},
+      filename = function() {paste(file_name, "-report.pdf")},
       content = function(file) {
-        # Copy the report file to a temporary directory before processing it, in
-        # case we don't have write permissions to the current working dir (which
-        # can happen when deployed).
-        tempReport <- file.path(temp_folder, "report.Rmd")
-        file.copy("report.Rmd", 
-                  tempReport, 
-                  overwrite = TRUE)
-        # Set up parameters to pass to Rmd document
+        # Copy the report file to a temporary directory before processing it,
+        # in case we don't have write permissions to the current working dir
+        tempReport <- file.path(tempdir(), "report.Rmd")
+        file.copy("report.Rmd", tempReport, overwrite = TRUE)  # Ensure path is correct
+        
+        
+        # Set up parameters to pass to the Rmd document
         params <- list(DF = DF, 
                        hash = hash, 
                        ERRORS = L.ERRORS,
                        report = report)
         
-        # Knit the document, passing in the `params` list, and eval it in a
-        # child of the global environment (this isolates the code in the document
-        # from the code in this app).
+        # Render the Rmd file to generate a LaTeX file (.tex)
         rmarkdown::render(tempReport, 
                           params = params,
                           output_file = file,

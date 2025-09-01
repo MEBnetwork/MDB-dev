@@ -16,6 +16,12 @@ library(getPass)
 # dsn_uid = "dbfKN5Xyr1"
 # dsn_pwd = "z%Ri84s%$s<_8GU^"
 
+dsn_database = 'soiltemp'
+dsn_hostname='localhost'
+dsn_port='5432'
+dsn_uid='postgres'
+dsn_pwd='1234'
+
 ## Connect the Database with R using RPostgreSQL
 tryCatch({
   drv <- RPostgres::Postgres()
@@ -357,7 +363,7 @@ CREATE TABLE clim_ts (
     cts_id SERIAL PRIMARY KEY,
     mts_id INTEGER NOT NULL,
     ctf_id INTEGER NOT NULL,
-    cts_timestamp_utc TEXT,
+    cts_timestamp_utc TIMESTAMP,
     cts_value NUMERIC CHECK (cts_value >= -1000000000 AND cts_value <= 1000000000),
     cts_sensor_id VARCHAR(50),
     cts_bexis_id INTEGER NOT NULL,
@@ -424,3 +430,4 @@ graph
 
 # Close the database connection
 dbDisconnect(connec)
+

@@ -58,6 +58,12 @@ Habitats: `r unique(DF$METADATA$HABITAT_TYPE)`
 
 Owners: `r unique(paste(DF$PEOPLE$FIRSTNAME, DF$PEOPLE$LASTNAME))`
 
+Emails: `r unique(paste(DF$PEOPLE$EMAIL))` 
+
+Affilations: `r unique(paste(DF$PEOPLE$PEOPLE_AFFILIATION))`
+
+ORCID: `r unique(paste(DF$PEOPLE$PEOPLE_ORCID))`
+
 ## Data summary
 
 ### Site spatial distribution

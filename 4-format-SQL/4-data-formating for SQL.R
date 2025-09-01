@@ -3,17 +3,19 @@
 library(tidyverse)
 library(trustedtimestamping)
 library(openssl)
+library(lubridate)
 # Encryption key
 passphrase <- charToRaw("MDB secret code phrase")
 key <- sha256(passphrase)
 
 #### Loading the dataset ####
-data.path = '0-data/bexis_download/'
+#data.path = "C:\\Bedassa\\SoilTemp_Processed\\MDB-dev\\0-data\\bexis_download\\"
+# '0-data/bexis_download/'
 listing.bexis = read.csv(paste0(data.path, 'listing-bexis.csv'))
 list.files = list.files(data.path)
 list.zip.files = list.files[grep('BEXIS.zip', list.files)]
 
-i = 2
+i = 1
 formate.dataset.to.sql = function(i, list.zip.files, listing.bexis, data.path){
   dataset.id = list.zip.files[i] |> 
     str_remove('dataset-') |> 
@@ -111,7 +113,7 @@ formate.dataset.to.sql = function(i, list.zip.files, listing.bexis, data.path){
   meta_ts_sensor_height_range <- as.numeric(meta_ts_sensor_height_range)     
   
   meta_ts_data <- data.frame(
-    mts_id = dataRDS$DATA$METADATA$META_ID, #TODO update with the database meta_ts_id
+  #  mts_id = dataRDS$DATA$METADATA$META_ID, #TODO update with the database meta_ts_id
     site_id =  dataRDS$DATA$METADATA$SITE_ID,
     log_id = dataRDS$DATA$METADATA$LOGGER_CODE, #TODO update with the database log_id
     mtf_id = 9999 |> as.integer(),
@@ -140,15 +142,36 @@ formate.dataset.to.sql = function(i, list.zip.files, listing.bexis, data.path){
   )
   
   #### >> 2.7. Clim_ts ####
-  clim_ts_data <- data.frame(
-    mts_id = dataRDS$DATA$TIMESERIES$RAW_DATA_IDENTIFIER, #TODO to be updated with database value
-    ctf_id = 9999 |> as.integer(), 
-    cts_timestamp = dataRDS$DATA$TIMESERIES$DATE |> as.Date(), #TODO check expected format
-    cts_value = dataRDS$DATA$TIMESERIES$CTS_VALUES |> as.numeric(),
-    cts_sensor_id =  dataRDS$DATA$TIMESERIES$RAW_DATA_IDENTIFIER |> as.character(),
-    cts_bexis_id = dataset.id |> as.integer(),
-    cts_update = "NO" |> as.character()
+ 
+  # Extract relevant columns
+  YEAR  <- as.integer(dataRDS$DATA$TIMESERIES$YEAR)
+  MONTH <- as.integer(dataRDS$DATA$TIMESERIES$MONTH)
+  DAY   <- as.integer(dataRDS$DATA$TIMESERIES$DAY)
+  TIME  <- as.integer(dataRDS$DATA$TIMESERIES$TIME)
+  
+  # Build datetime strings for POSIXct
+  datetime_str <- ifelse(
+    !is.na(TIME),
+    paste(YEAR, MONTH, DAY, TIME, "00", "00", sep = "-"),
+    NA
   )
+  
+  # Convert to POSIXct
+  cts_timestamp <- as.POSIXct(datetime_str, format = "%Y-%m-%d-%H-%M-%S", tz = "UTC")
+  
+  # Build data frame
+  clim_ts_data <- data.frame(
+    ctf_id = rep(9999L, length(cts_timestamp)),
+    cts_timestamp = cts_timestamp,
+    cts_value = as.numeric(dataRDS$DATA$TIMESERIES$CTS_VALUES),
+    cts_sensor_id = as.character(dataRDS$DATA$TIMESERIES$RAW_DATA_IDENTIFIER),
+    cts_update = rep("NO", length(cts_timestamp)),
+    cts_bexis_id = dataset.id |> as.integer(),
+    stringsAsFactors = FALSE
+  )
+  
+  head(clim_ts_data)
+  
   
   if(!is.na(dataRDS$DATA$VEGETATION.METADATA)){
     #### >> 2.8. Metadata vegetation survey ####
@@ -516,3 +539,4 @@ formate.dataset.to.sql = function(i, list.zip.files, listing.bexis, data.path){
 
 # To open a dataset: 
 # DATASETS = formate.dataset.to.sql(i=1, list.zip.files, listing.bexis, data.path)
+

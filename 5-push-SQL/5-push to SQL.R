@@ -1,6 +1,11 @@
+
 library(DBI)
 library(RPostgres)
 library(getPass)
+library(dplyr)
+library(geosphere)  # for distance calculation
+library(purrr)
+library(raster)
 
 #### 0. Connection to the database ####
 # @Bedassa Set your credentials below 
@@ -11,7 +16,12 @@ library(getPass)
 # dsn_uid = "postgres"         # username.
 # dsn_pwd <- getPass::getPass("Enter DSN Password: ")
 # drv <- RPostgres::Postgres()
-
+dsn_database = 'soiltemp'
+dsn_hostname='localhost'
+dsn_port='5432'
+dsn_uid='postgres'
+dsn_pwd='1234'
+drv <- RPostgres::Postgres()
 connec <- dbConnect(drv, 
                       dbname = dsn_database,
                       host = dsn_hostname, 
@@ -20,7 +30,7 @@ connec <- dbConnect(drv,
                       password = dsn_pwd)
 
 #### 1. Functions ####
-identify.fuzzy.matchs = function(pattern, vector, sensitivity = 1, min = 0.1){
+identify.fuzzy.matchs = function(pattern, vector, sensitivity = 1, min = 0.99){
   matching = data.frame(position = NA,priority = NA)[-1,]
   for(i in 0:10){
     test = agrep(pattern = pattern, x = vector, max.distance = i)
@@ -87,10 +97,10 @@ identify.fuzzy.matchs = function(pattern, vector, sensitivity = 1, min = 0.1){
 # print(updated_pers)
 
 #### >> 1.0. Flags ####
-create.flags = F
+create.flags = T
 if(create.flags == T){
   flags.site = 
-    read.csv('1-data/flag-combination.csv') |> 
+    read.csv('0-data/flag-combination.csv') |> 
     dplyr::select(sif_id = val, 
            sif_combination = flags) |> 
     mutate(sif_description = 'NOT DEFINED')
@@ -103,7 +113,7 @@ if(create.flags == T){
             statement = app)
   
   flags.loggers = 
-    read.csv('1-data/flag-combination.csv') |> 
+    read.csv('0-data/flag-combination.csv') |> 
     dplyr::select(lgf_id = val, 
            lgf_combination = flags) |> 
     mutate(lgf_description = 'NOT DEFINED')
@@ -116,7 +126,7 @@ if(create.flags == T){
             statement = app)
   
   flags.meta.ts = 
-    read.csv('1-data/flag-combination.csv') |> 
+    read.csv('0-data/flag-combination.csv') |> 
     dplyr::select(mtf_id = val,
            mtf_combination = flags) |> 
     mutate(mtf_description = 'NOT DEFINED')
@@ -129,7 +139,7 @@ if(create.flags == T){
             statement = app)
   
   flags.clim.ts = 
-    read.csv('1-data/flag-combination.csv') |> 
+    read.csv('0-data/flag-combination.csv') |> 
     dplyr::select(ctf_id = val, 
            ctf_combination = flags) |> 
     mutate(ctf_description = 'NOT DEFINED')
@@ -606,7 +616,7 @@ push.site = function(
     cat('There is no match in the database, a new entry will be created\n')
     app = sqlAppendTable(con = connec,
                          table = 'sites',
-                         value = site.to.test |> select(-key),
+                         value = site.to.test |> dplyr::select(-key),
                          row.names = F)
     dbExecute(con = connec,
               statement = app)
@@ -621,7 +631,7 @@ push.site = function(
       site.to.test |>
         mutate(site_id = db.site.id) |>
         relocate(site_id, .before = exp_id) |> 
-        select(-key)
+        dplyr::select(-key)
     )
   }
   
@@ -646,7 +656,7 @@ push.site = function(
   if(action == '0'){
     app = sqlAppendTable(con = connec,
                          table = 'sites',
-                         value = site.to.test |> select(-key),
+                         value = site.to.test |> dplyr::select(-key),
                          row.names = F)
     dbExecute(con = connec,
               statement = app)
@@ -679,7 +689,7 @@ push.site = function(
     site.to.test |>
       mutate(site_id = db.site.id) |>
       relocate(site_id, .before = exp_id) |> 
-      select(-key)
+      dplyr::select(-key)
   )
 }
 
@@ -1013,6 +1023,78 @@ push.clim.ts = function(
   }
 }
 
+
+push.clim.ts.bulk <- function(clim.ts.to.push, connec) {
+  
+  action <- readline('Do you like to push the dataset? (y/n): \n')
+  if(action != 'y') {
+    cat("The data will not be updated!\n")
+    return(NULL)
+  }
+  
+  clim.ts.to.push <- as_tibble(clim.ts.to.push)
+  
+  # 1. Load meta_ts mapping from DB
+  meta_ts_db <- tbl(connec, "meta_ts") %>%
+    collect() %>%
+    dplyr::select(mts_id, mts_owner_id)
+  
+  # 2. Check mapping: cts_sensor_id (clim_ts) must exist in mts_owner_id (meta_ts)
+  unmatched_sensors <- setdiff(unique(clim.ts.to.push$cts_sensor_id), unique(meta_ts_db$mts_owner_id))
+  
+  if(length(unmatched_sensors) > 0) {
+    cat("The following sensors in clim_ts do not exist in meta_ts:\n")
+    print(unmatched_sensors)
+    stop("Sensor mismatch detected. Please update meta_ts before pushing clim_ts.")
+  } else {
+    cat("All sensors in clim_ts have a matching mts_owner_id in meta_ts.\n")
+  }
+  
+  # 3. Join clim_ts with meta_ts to get correct mts_id
+  clim.ts.to.push <- clim.ts.to.push %>%
+    left_join(meta_ts_db, by = c("cts_sensor_id" = "mts_owner_id"))
+  
+  # 4. Rename and select columns to match DB schema
+  clim.ts.to.push <- clim.ts.to.push %>%
+    rename(cts_timestamp_utc = cts_timestamp) %>%
+    dplyr::select(mts_id, ctf_id, cts_timestamp_utc, cts_value, cts_sensor_id, cts_bexis_id, cts_update)
+  
+  # 5. Check for duplicates before inserting
+  db_existing <- tbl(connec, "clim_ts") %>%
+    dplyr::select(mts_id, cts_timestamp_utc, cts_value) %>%
+    collect()
+  
+  # Convert timestamp formats to the same type (Date)
+  db_existing <- db_existing %>%
+    mutate(cts_timestamp_utc = (cts_timestamp_utc))
+  
+  clim.ts.to.push <- clim.ts.to.push %>%
+    mutate(cts_timestamp_utc = (cts_timestamp_utc))
+  
+  new_rows <- clim.ts.to.push %>%
+    anti_join(db_existing, by = c("mts_id", "cts_timestamp_utc", "cts_value"))
+  
+  
+  if(nrow(new_rows) == 0) {
+    cat("No new rows to insert. All data already exist in clim_ts.\n")
+    return(NULL)
+  }
+  
+  # 6. Bulk insert new rows
+  app <- sqlAppendTable(
+    con = connec,
+    table = 'clim_ts',
+    value = new_rows,
+    row.names = FALSE
+  )
+  
+  dbExecute(con = connec, statement = app)
+  
+  cat(" Successfully pushed", nrow(new_rows), "new rows to clim_ts!\n")
+}
+
+
+
 # clim_ts_added = push.clim.ts(clim.ts.to.test)
 
 # meta_ts_people
@@ -1023,16 +1105,67 @@ push.clim.ts = function(
 
 #### 2. Pushing the dataset ####
 data.path = '1-data/bexis_download/'
+source("C:\\Bedassa\\SoilTemp_Processed\\MDB-dev\\4-format-SQL\\4-data-formating for SQL.R")
+
+data.path = "C:\\Bedassa\\SoilTemp_Processed\\MDB-dev\\0-data\\bexis_download\\"
+
 listing.bexis = read.csv(paste0(data.path, 'listing-bexis.csv'))
 list.files = list.files(data.path)
 list.zip.files = list.files[grep('BEXIS.zip', list.files)]
 
-i = 1 # Here add the dataset to push
+
+## fill altitude if missing from from DEM
+
+dem <- raster("C:\\Users\\cbedassaregassa\\OneDrive - Universiteit Antwerpen\\SoilTemp\\SoilTemp_Database\\GDEM-10km-colorized.tif")
+coords <- xyFromCell(dem, 1:ncell(dem))
+elevation <- extract(dem, coords)
+# Combine coordinates and elevation into a data frame
+dem_data <- data.frame(loc_long = coords[, 1], loc_lat = coords[, 2], loc_alt = elevation)
+
+# Function to get nearest dem_data altitude for a single point
+get_nearest_alt <- function(lon, lat, dem_df) {
+  # Compute distances from the point to all DEM points
+  dists <- distHaversine(matrix(c(lon, lat), ncol = 2),
+                         matrix(c(dem_df$loc_long, dem_df$loc_lat), ncol = 2))
+  # Return the altitude of the nearest DEM point
+  dem_df$loc_alt[which.min(dists)]
+}
+
+i = 4 # Here add the dataset to push
 
 DATASETS = 
-  formate.dataset.to.sql(i=1, 
+  formate.dataset.to.sql(i=i, 
                          list.zip.files, 
                          listing.bexis, data.path) # Function from 2-4-1-3
+
+
+# Apply to all locations
+DATASETS$location <- DATASETS$location %>%
+  rowwise() %>%
+  mutate(loc_alt = get_nearest_alt(loc_long, loc_lat, dem_data)) %>%
+  ungroup()
+
+DATASETS$sites <- DATASETS$sites %>%
+  rowwise() %>%
+  mutate(site_alt = get_nearest_alt(site_long, site_lat, dem_data)) %>%
+  ungroup()
+## check if clm_ts cts_sensor_id are in meta_ts mts_owner_id
+all(DATASETS$clim_ts$cts_sensor_id %in% DATASETS$meta_ts$mts_owner_id) # should be TRUE
+all(DATASETS$meta_ts$mts_owner_id %in% DATASETS$clim_ts$cts_sensor_id) # should be TRUE
+# If not TRUE, you need to check why and fix it before pushing the data
+
+
+# 2. Check mapping: cts_sensor_id (clim_ts) must exist in mts_owner_id (meta_ts)
+unmatched_sensors <- setdiff(unique(DATASETS$clim_ts$cts_sensor_id), unique(DATASETS$meta_ts$mts_owner_id))
+
+if(length(unmatched_sensors) > 0) {
+  cat("The following sensors in clim_ts do not exist in meta_ts:\n")
+  print(unmatched_sensors)
+  stop("Sensor mismatch detected. Please update meta_ts before pushing clim_ts.")
+} else {
+  cat("All sensors in clim_ts have a matching mts_owner_id in meta_ts.\n")
+}
+
 
 people_added = push.people(people.df = DATASETS$people)
 
@@ -1046,4 +1179,4 @@ loggers_added = push.loggers(logger.df = DATASETS$loggers)
 
 meta_ts_added = push.meta.ts.s(DATASETS$meta_ts)
 
-clim_ts_added = push.clim.ts(DATASETS$clim_ts)
+clim_ts_added = push.clim.ts.bulk(DATASETS$clim_ts,connec)

@@ -1,3 +1,5 @@
+
+
 rm(list = ls())
 library(jsonlite)
 library(XML)
@@ -6,7 +8,8 @@ library(curl)
 library(tidyverse)
 
 userpwd = getPass::getPass(msg = 'USER:PWD')
-setwd('0-data/bexis_download/')
+
+#setwd("C:\\Bedassa\\SoilTemp_Processed\\MDB-dev\\0-data\\bexis_download\\")
 
 h <- new_handle()
 handle_setopt(
@@ -15,8 +18,8 @@ handle_setopt(
   userpwd = userpwd
 )
 
-# data.frame(bexis.max = 0, downloaded = 0, processed = 0) |>
-#   write.csv('processing-records.csv', row.names = F)
+data.frame(bexis.max = 0, downloaded = 0, processed = 0) |>
+  write.csv('processing-records.csv', row.names = F)
 
 df.process = read.csv(file = 'processing-records.csv')
 
@@ -50,7 +53,7 @@ listing.bexis =
 
 MDB.listing = 
   listing.bexis |>
-  filter(!is.na(project) & project == 'SoilTemp') |> 
+  filter(!is.na(project) & project %in% c("Microclimate Database (MDB)", "SoilTemp")) |>
   filter(!is.na(attachment.id))
 
 write.csv(MDB.listing, 'listing-bexis.csv', row.names = F)
@@ -90,3 +93,4 @@ map(.x = (nrow(zip.files[zip.files$dataset<=df.process$downloaded,])+1):nrow(zip
 
 df.process$downloaded = max(zip.files$dataset)
 write.csv(df.process, file = 'processing-records.csv', row.names = F)
+

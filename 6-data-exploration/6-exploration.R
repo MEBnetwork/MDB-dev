@@ -8,7 +8,8 @@ library(leaflet)
 library(ggplot2)
 library(tidyverse)
 library(dbplyr)
-library(RPostgreSQL)
+#library(RPostgreSQL)
+library(RPostgres)
 library(DBI)
 library(rmarkdown)
 library(knitr)
@@ -42,7 +43,13 @@ listlicence = c("CC-Zero", "CC-BY", "CC-BY-SA", "CC-BY-ND", "CC-BY-NC", "CC-BY-N
 #                        port='5432',
 #                        user='postgres',
 #                        password='postgres')
-connexion = connec
+#connexion = connec
+connexion <- dbConnect(RPostgres::Postgres(),
+                       dbname = 'soiltemp',
+                       host='localhost',
+                       port='5432',
+                       user='postgres',
+                       password='1234')
 # loading the tables needed one by one
 experiment <- dplyr::tbl(connexion, "experiments")
 
@@ -65,6 +72,7 @@ vegetation <- dplyr::tbl(connexion, "meta_veg_surveys")
 # 
 # # inner join to have the location in sites
 # sites_location = inner_join(sites, location, by = c("location_id" = "id"))
+
 
 world = rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
 
@@ -343,13 +351,13 @@ server <- function(input,output) {
     if (input$choiceconcoor== "1") { 
       pickerInput("country",
                   "Country :", 
-                  choices = world_filtered()%>%select(name),
+                  choices = world_filtered()%>%pull(name),
                   options = list(`actions-box` = TRUE,
                                  dropup = FALSE,
                                  width = "265px",
                                  `live-search` = TRUE),
                   multiple = TRUE,
-                  selected = world_filtered()%>%pull(name))
+                  selected =  world_filtered() %>% pull(name) %>% sort())#world_filtered()%>%pull(name))
     }
   })
   
@@ -368,13 +376,13 @@ server <- function(input,output) {
   output$opsubhabitat <- renderUI({
     pickerInput("subhabitat",
                 "Subhabitat :", 
-                choices = subhabitat_filtered()|>select(name_subhabitat),
+                choices = subhabitat_filtered()|>dplyr::select(name_subhabitat),
                 options = list(`actions-box` = TRUE,
                                dropup = FALSE,
                                width = "265px",
                                `live-search` = TRUE),
                 multiple = TRUE,
-                selected = subhabitat_filtered()%>%select(name_subhabitat))
+                selected = subhabitat_filtered()%>%dplyr::select(name_subhabitat))
   })
   
   
@@ -395,8 +403,12 @@ server <- function(input,output) {
   
   
   location_filtered <- reactive ({
+    cat("Inputs - choiceconcoor:", input$choiceconcoor, "\n")
+    cat("Inputs - country:", input$country, "\n")
+    cat("Inputs - long:", input$long, "\n")
+    cat("Inputs - lat:", input$lat, "\n")
     if (input$choiceconcoor== "1") {
-    country_filtered = country_filtered()%>%select(country_code)
+    country_filtered = country_filtered()%>%dplyr::select(loc_country)
     alt1 = input$alt[1]
     alt2 = input$alt[2]
     location_filtered <- location %>%
@@ -437,7 +449,7 @@ server <- function(input,output) {
   })
   
   subhabitat_filtered <- reactive({
-    id_hab = habitat_filtered()%>%select(id)
+    id_hab = habitat_filtered()%>%dplyr::select(id)
     subhabitat_filtered <- subhabitat %>%
       filter(id_habitat %in% id_hab)
     return(subhabitat_filtered)
