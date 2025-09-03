@@ -10,18 +10,13 @@ library(raster)
 #### 0. Connection to the database ####
 # @Bedassa Set your credentials below 
 
-# dsn_database = "MDB"   #  name of your Database
-# dsn_hostname = "localhost"  
-# dsn_port = 5432      #  port number. e.g. 98939
-# dsn_uid = "postgres"         # username.
-# dsn_pwd <- getPass::getPass("Enter DSN Password: ")
-# drv <- RPostgres::Postgres()
-dsn_database = 'soiltemp'
-dsn_hostname='localhost'
-dsn_port='5432'
-dsn_uid='postgres'
-dsn_pwd='1234'
+dsn_database = "MDB"   #  name of your Database
+dsn_hostname = "postgres02.srv.idiv.de"
+dsn_port = 5432
+dsn_uid = "dbfKN5Xyr1"
+dsn_pwd = "z%Ri84s%$s<_8GU^"
 drv <- RPostgres::Postgres()
+
 connec <- dbConnect(drv, 
                       dbname = dsn_database,
                       host = dsn_hostname, 
