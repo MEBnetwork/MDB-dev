@@ -105,7 +105,7 @@ knitr::include_graphics('height.png')
 ### Time series
 
 ```{r, echo=FALSE, out.width = '100%'}
-# knitr::include_graphics('ts.png')
+knitr::include_graphics('ts.png')
 ```
 .
 
