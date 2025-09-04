@@ -1798,6 +1798,31 @@ server <- function(input, output, session) {
     #     )
     #   }
     # )
+    # output$report <- downloadHandler(
+    #   filename = function() {paste(file_name, "-report.pdf")},
+    #   content = function(file) {
+    #     # Copy the report file to a temporary directory before processing it,
+    #     # in case we don't have write permissions to the current working dir
+    #     tempReport <- file.path(tempdir(), "report.Rmd")
+    #     file.copy("report.Rmd", tempReport, overwrite = TRUE)  # Ensure path is correct
+    #     
+    #     
+    #     # Set up parameters to pass to the Rmd document
+    #     params <- list(DF = DF, 
+    #                    hash = hash, 
+    #                    ERRORS = L.ERRORS,
+    #                    report = report)
+    #     
+    #     # Render the Rmd file to generate a LaTeX file (.tex)
+    #     rmarkdown::render(tempReport, 
+    #                       params = params,
+    #                       output_file = file,
+    #                       output_format = rmarkdown::pdf_document(),
+    #                       envir = new.env(parent = globalenv()),
+    #                       knit_root_dir = temp_folder
+    #     )
+    #   }
+    # )
     output$report <- downloadHandler(
       filename = function() {paste(file_name, "-report.pdf")},
       content = function(file) {
@@ -1814,13 +1839,55 @@ server <- function(input, output, session) {
                        report = report)
         
         # Render the Rmd file to generate a LaTeX file (.tex)
-        rmarkdown::render(tempReport, 
-                          params = params,
-                          output_file = file,
-                          output_format = rmarkdown::pdf_document(),
-                          envir = new.env(parent = globalenv()),
-                          knit_root_dir = temp_folder
+        rmarkdown::render(
+          input = tempReport, 
+          output_file = file.path(tempdir(), "file_output.tex"), # Temporary .tex file
+         params = params,
+          output_format = rmarkdown::pdf_document(
+            latex_engine = "pdflatex",
+            keep_tex = TRUE
+          ),
+          envir = new.env(parent = globalenv())
         )
+        
+        # Define path to the generated LaTeX file
+        tex_file_path <- file.path(tempdir(), "file_output.tex")
+        Sys.setenv(PATH = paste(Sys.getenv("PATH"), "C:/Program Files/MiKTeX/miktex/bin/x64", sep = ";"))
+        
+        # Use normalizePath to ensure correct absolute path handling
+        tex_file_path <- normalizePath(tex_file_path)
+        tempdir_path <- normalizePath(tempdir())  # Ensure temp directory is also fully qualified
+        
+        # Use double quotes around file paths to handle spaces correctly
+        latex_command <- paste('"C:/Program Files/MiKTeX/miktex/bin/x64/pdflatex.exe"', shQuote(tex_file_path), "--output-directory", shQuote(tempdir_path))
+        
+        # Log the LaTeX command for debugging
+        cat("Running LaTeX command:\n", latex_command, "\n")
+        
+        # Use system() to compile the LaTeX file with pdflatex
+        latex_output <- system(latex_command, intern = TRUE)
+        
+        # Check if the LaTeX compilation was successful
+        if (length(latex_output) > 0) {
+          cat("LaTeX output:\n", latex_output, "\n")
+        }
+        
+        # Define path to the compiled PDF file
+        compiled_pdf_path <- file.path(tempdir(), "file_output.pdf")
+        
+        # If LaTeX compilation is successful, move the PDF to the output file location
+        if (file.exists(compiled_pdf_path)) {
+          file.rename(compiled_pdf_path, file)
+        } else {
+          warning("PDF file not generated!")
+        }
+        
+        # Optionally, check LaTeX log file for errors
+        log_file <- file.path(tempdir(), "file_output.log")
+        if (file.exists(log_file)) {
+          log_contents <- readLines(log_file)
+          cat("LaTeX Log:\n", log_contents, "\n")
+        }
       }
     )
     
