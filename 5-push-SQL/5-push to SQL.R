@@ -6,6 +6,7 @@ library(dplyr)
 library(geosphere)  # for distance calculation
 library(purrr)
 library(raster)
+library(stringr)
 
 #### 0. Connection to the database ####
 # @Bedassa Set your credentials below 
@@ -15,6 +16,7 @@ dsn_hostname = "postgres02.srv.idiv.de"
 dsn_port = 5432
 dsn_uid = "dbfKN5Xyr1"
 dsn_pwd = "z%Ri84s%$s<_8GU^"
+
 drv <- RPostgres::Postgres()
 
 connec <- dbConnect(drv, 
@@ -848,32 +850,32 @@ push.loggers =
 # meta.ts.list.db = tbl(connec, 'meta_ts') |> collect()
 
 push.meta.ts = function(
-    meta.ts.to.test, 
+    meta.ts.to.test,
     meta.ts.list.db){
 
-  meta.ts.to.test$site_id = 
+  meta.ts.to.test$site_id =
     sites_added$site_id[sites_added$site_owner_id == meta.ts.to.test$site_id] |>
     as.integer()
-  
-  meta.ts.to.test$log_id = 
+
+  meta.ts.to.test$log_id =
     loggers_added$log_id[loggers_added$log_owner_id == meta.ts.to.test$log_id] |>
     as.integer()
-  
+
   # Controls
-  matchs.name = 
+  matchs.name =
     identify.fuzzy.matchs(meta.ts.to.test$mts_owner_id,
-                          meta.ts.list.db$mts_owner_id, 
+                          meta.ts.list.db$mts_owner_id,
                           sensitivity = 1)
-  
-  m = 
+
+  m =
     right_join(meta.ts.list.db,
-                 matchs.name, 
-                 by = c('mts_owner_id' = 'match')) |> 
-    relocate(priority, .before = mts_id) |> 
-    arrange(desc(priority)) |> 
+                 matchs.name,
+                 by = c('mts_owner_id' = 'match')) |>
+    relocate(priority, .before = mts_id) |>
+    arrange(desc(priority)) |>
     distinct(mts_id, .keep_all = T)
-  
-  
+
+
   if(nrow(m)>0){
     cat('There is/are match(es)\n\nmeta.ts to add: \n')
     print.data.frame(meta.ts.to.test |> data.frame(), row.names = F)
@@ -888,6 +890,185 @@ push.meta.ts = function(
                          row.names = F)
     dbExecute(con = connec,
               statement = app)
+
+    db.meta.ts.id =
+      tbl(connec, 'meta_ts') |>
+      dplyr::select(mts_id) |>
+      collect() |>
+      max()
+
+    cat('The new entry was added to the database')
+    return(
+      meta.ts.to.test |>
+        mutate(mts_id = db.meta.ts.id) |>
+        relocate(mts_id, .before = site_id)
+    )
+  }
+
+  confirm.1 = 'n'
+  while(confirm.1 != 'y'){
+    action =
+      readline('What do you like to do?
+0: add to the database new entry
+1: update a database entry
+2: use a database entry')
+    if(action %in% paste0(0:2)){
+      cat(paste0("You will ",
+                 if(action == '0'){"add a new entry to the database"
+                 }else if(action == '1'){'update the database entry'
+                 }else if(action == '2'){'use the database entry'}
+      ))
+      confirm.1 = readline('Confirm your choice (y/n): \n')
+    }else{
+      cat('CHOICE NOT CONFORM')
+    }
+  }
+  if(action == '0'){
+    app = sqlAppendTable(con = connec,
+                         table = 'meta_ts',
+                         value = meta.ts.to.test,
+                         row.names = F)
+    dbExecute(con = connec,
+              statement = app)
+
+    db.meta.ts.id =
+      tbl(connec, 'meta_ts') |>
+      dplyr::select(mts_id) |>
+      collect() |>
+      max()
+
+    cat('The new entry was added to the database')
+  }else{
+    id.valid = F
+    while(id.valid == F) {
+      db.meta.ts.id =
+        readline(paste0('Which database entry do you like to ',
+                        if(action == '1'){'update? '}else{'use? '},
+                        '\nentrer the meta.ts_id from the database'))
+      if(db.meta.ts.id %in% m$mts_id){
+        cat(paste0("You will use the meta.ts_id: ", db.meta.ts.id))
+        confirm.2 = readline('Confirm your choice (y/n): \n')
+        if(confirm.2 == 'y'){id.valid = T}
+      }else{cat('CHOICE NOT CONFORM')}
+    }
+    if(action == 1){
+      cat("Please prepare the updated vector and use the update.people function!")
+    }
+  }
+  return(
+    meta.ts.to.test |>
+      mutate(mts_id = as.numeric(db.meta.ts.id)) |>
+      relocate(mts_id, .before = site_id)
+  )
+}
+
+push.meta.ts.s =
+  function(meta.ts.df){
+    added =
+      map_df(
+        .x = 1:nrow(meta.ts.df),
+        .f = ~{
+          print(.x)
+          push.meta.ts(
+          meta.ts.to.test = meta.ts.df[.x,],
+          meta.ts.list.db =
+            tbl(connec, 'meta_ts') |>
+            collect()
+          )}
+        )
+    return(added)
+  }
+
+
+
+# helper: fuzzy compare multiple columns
+identify.fuzzy.multi <- function(new_row, db_df, cols, threshold = 0.85) {
+  require(stringdist)
+  
+  # for each db row, compute similarity across columns
+  sim_scores <- apply(db_df[cols], 1, function(db_row) {
+    sims <- mapply(function(a, b) {
+      stringdist::stringsim(a, b, method = "jw")  # Jaro-Winkler
+    }, as.character(new_row[cols]), as.character(db_row))
+    mean(sims, na.rm = TRUE)  # average similarity across cols
+  })
+  
+  matches <- db_df %>%
+    mutate(similarity = sim_scores) %>%
+    filter(similarity >= threshold) %>%
+    arrange(desc(similarity))
+  
+  return(matches)
+}
+
+
+
+push.meta.ts_multi_column = function(
+    meta.ts.to.test, 
+    meta.ts.list.db){
+  
+  # Map site_id safely
+  site_match <- sites_added %>%
+    filter(site_owner_id == meta.ts.to.test$site_id)
+  
+  if(nrow(site_match) == 1){
+    meta.ts.to.test$site_id <- site_match$site_id
+  } else if(nrow(site_match) == 0){
+    warning("No matching site found for site_owner_id")
+    meta.ts.to.test$site_id <- NA_integer_
+  } else {
+    warning("Multiple matching sites found, taking the first one")
+    meta.ts.to.test$site_id <- site_match$site_id[1]
+  }
+  
+  # Map log_id safely including log_brand
+  # log_match <- loggers_added %>%
+  #   filter(log_owner_id == meta.ts.to.test$log_id & 
+  #            log_brand == meta.ts.to.test$mts_log_brand)
+  log_match <- loggers_added %>%
+    filter(log_owner_id == meta.ts.to.test$log_id)
+  
+  if(nrow(log_match) == 1){
+    meta.ts.to.test$log_id <- log_match$log_id
+  } else if(nrow(log_match) == 0){
+    warning("No matching logger found for log_owner_id and log_brand")
+    meta.ts.to.test$log_id <- NA_integer_
+  } else {
+    warning("Multiple matching loggers found, taking the first one")
+    meta.ts.to.test$log_id <- log_match$log_id[1]
+  }
+  
+  
+  
+  # Controls
+  matchs.name = identify.fuzzy.multi(
+    new_row = meta.ts.to.test,      # pass the whole row (data.frame of 1 row)
+    db_df   = meta.ts.list.db,      # pass the full DB table
+    cols    = c("mts_owner_id", "mts_sensor_height"),
+    threshold = 0.95
+  )
+  
+  m = matchs.name %>%
+    arrange(desc(similarity)) %>%
+    distinct(mts_id, .keep_all = TRUE)
+  
+  
+  if(nrow(m)>0){
+    cat('There is/are match(es)\n\nmeta.ts to add: \n')
+    print.data.frame(meta.ts.to.test |> data.frame(), row.names = F)
+    cat("\nMatch(es) in the database:\n")
+    print.data.frame(m |> data.frame(), row.names = F)
+    cat('\n(Note:\nmatches are order by priority. 1 = full match -> 0.1 = low match')
+  }else{
+    cat('There is no match in the database, a new entry will be created\n')
+    app = sqlAppendTable(
+      con = connec,
+      table = "meta_ts",
+      value = meta.ts.to.test,   # no mts_id in dataset, so no need to drop
+      row.names = FALSE
+    )
+    dbExecute(con = connec, statement = app)
+    
     
     db.meta.ts.id = 
       tbl(connec, 'meta_ts') |>
@@ -922,12 +1103,15 @@ push.meta.ts = function(
     }
   }
   if(action == '0'){
-    app = sqlAppendTable(con = connec,
-                         table = 'meta_ts',
-                         value = meta.ts.to.test,
-                         row.names = F)
-    dbExecute(con = connec,
-              statement = app)
+    app = sqlAppendTable(
+      con = connec,
+      table = "meta_ts",
+      value = meta.ts.to.test,   # no mts_id in dataset, so no need to drop
+      row.names = FALSE
+    )
+    dbExecute(con = connec, statement = app)
+    
+    
     
     db.meta.ts.id = 
       tbl(connec, 'meta_ts') |>
@@ -960,20 +1144,20 @@ push.meta.ts = function(
   )
 }
 
-push.meta.ts.s = 
+push.meta.ts_multi_column = 
   function(meta.ts.df){
     added =
       map_df(
         .x = 1:nrow(meta.ts.df),
         .f = ~{
           print(.x)
-          push.meta.ts(
-          meta.ts.to.test = meta.ts.df[.x,],
-          meta.ts.list.db = 
-            tbl(connec, 'meta_ts') |> 
-            collect()
+          push.meta.ts_multi_column(
+            meta.ts.to.test = meta.ts.df[.x,],
+            meta.ts.list.db = 
+              tbl(connec, 'meta_ts') |> 
+              collect()
           )}
-        ) 
+      ) 
     return(added)
   }
 
@@ -1100,7 +1284,7 @@ push.clim.ts.bulk <- function(clim.ts.to.push, connec) {
 
 #### 2. Pushing the dataset ####
 data.path = '1-data/bexis_download/'
-source("C:\\Bedassa\\SoilTemp_Processed\\MDB-dev\\4-format-SQL\\4-data-formating for SQL.R")
+source("C:\\Users\\cbedassaregassa\\OneDrive - Universiteit Utrecht\\Documents\\MDB-dev\\4-format-SQL\\4-data-formating for SQL.R")
 
 data.path = "C:\\Bedassa\\SoilTemp_Processed\\MDB-dev\\0-data\\bexis_download\\"
 
@@ -1113,7 +1297,7 @@ list.zip.files = list.files[grep('BEXIS.zip', list.files)]
 
 dem <- raster("C:\\Users\\cbedassaregassa\\OneDrive - Universiteit Antwerpen\\SoilTemp\\SoilTemp_Database\\GDEM-10km-colorized.tif")
 coords <- xyFromCell(dem, 1:ncell(dem))
-elevation <- extract(dem, coords)
+elevation <- raster::extract(dem, coords)
 # Combine coordinates and elevation into a data frame
 dem_data <- data.frame(loc_long = coords[, 1], loc_lat = coords[, 2], loc_alt = elevation)
 
@@ -1126,24 +1310,72 @@ get_nearest_alt <- function(lon, lat, dem_df) {
   dem_df$loc_alt[which.min(dists)]
 }
 
-i = 4 # Here add the dataset to push
+i <-13 # dataset index
+bexis_id <- as.integer(str_extract(list.zip.files[i], "\\d+"))
 
 DATASETS = 
   formate.dataset.to.sql(i=i, 
                          list.zip.files, 
                          listing.bexis, data.path) # Function from 2-4-1-3
 
+any(duplicated(DATASETS$meta_ts$mts_owner_id)) ## should be FALSE
 
-# Apply to all locations
+# Collect all BEXIS IDs from relevant tables
+
+experiment <- dplyr::tbl(connec, "experiments")
+location <- dplyr::tbl(connec, "locations")
+loggers <- dplyr::tbl(connec, "loggers")
+meta_ts <- dplyr::tbl(connec, "meta_ts")
+clim_ts <- dplyr::tbl(connec, "clim_ts")
+sites <- dplyr::tbl(connec, "sites")
+people <- dplyr::tbl(connec, "people")
+
+people_ids     <- (people %>% collect())$ppl_bexis_id
+experiment_ids <- (experiment %>% collect())$exp_bexis_id
+log_ids        <- (loggers %>% collect())$log_bexis_id
+cts_ids        <- (clim_ts %>% collect())$cts_bexis_id
+sites_ids      <- (sites %>% collect())$site_bexis_id
+meta_ids      <- (meta_ts %>% collect())$mts_bexis_id
+
+# Combine all IDs into one vector
+all_ids <- c(ppl =unique(people_ids),exp= unique(experiment_ids), log=unique(log_ids),cts= unique(cts_ids), sites=unique(sites_ids), meta = unique(meta_ids)) 
+data.frame(id = all_ids)
+
+# Check if the bexis_id is already present
+if(bexis_id %in% all_ids){
+  message("Dataset with BEXIS ID ", bexis_id, " is already in the database.")
+} else {
+  message("Dataset with BEXIS ID ", bexis_id, " is NOT yet in the database and can be pushed.")
+}
+
+# Create a flag column: 2 if loc_alt is NA, 0 otherwise
+#DATASETS$location$flag <- ifelse(is.na(DATASETS$location$loc_alt), 2, 0)
+
+# Check if there is duplicatiosn 
+any(duplicated(DATASETS$meta_ts$mts_owner_id)) # should be FALSE
+
+# For locations
 DATASETS$location <- DATASETS$location %>%
   rowwise() %>%
-  mutate(loc_alt = get_nearest_alt(loc_long, loc_lat, dem_data)) %>%
+  mutate(loc_alt = if_else(
+    is.na(loc_alt),
+    get_nearest_alt(loc_long, loc_lat, dem_data), # fill from DEM
+    loc_alt                                      # keep existing
+  )) %>%
   ungroup()
 
-DATASETS$sites <- DATASETS$sites %>%
-  rowwise() %>%
-  mutate(site_alt = get_nearest_alt(site_long, site_lat, dem_data)) %>%
-  ungroup()
+# # For sites
+# DATASETS$sites <- DATASETS$sites %>%
+#   rowwise() %>%
+#   mutate(site_alt = if_else(
+#     is.na(site_alt),
+#     get_nearest_alt(site_long, site_lat, dem_data),
+#     site_alt
+#   )) %>%
+#   ungroup()
+
+
+
 ## check if clm_ts cts_sensor_id are in meta_ts mts_owner_id
 all(DATASETS$clim_ts$cts_sensor_id %in% DATASETS$meta_ts$mts_owner_id) # should be TRUE
 all(DATASETS$meta_ts$mts_owner_id %in% DATASETS$clim_ts$cts_sensor_id) # should be TRUE
@@ -1170,8 +1402,15 @@ experiments_added = push.experiments(experiment.df = DATASETS$experiments)
 
 sites_added = push.sites(DATASETS$sites)
 
-loggers_added = push.loggers(logger.df = DATASETS$loggers)
+loggers_added <- push.loggers(DATASETS$loggers)
+
 
 meta_ts_added = push.meta.ts.s(DATASETS$meta_ts)
 
 clim_ts_added = push.clim.ts.bulk(DATASETS$clim_ts,connec)
+
+
+
+
+
+
