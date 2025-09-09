@@ -831,6 +831,17 @@ server <- function(input, output, session) {
           cat("??? All RAW_DATA_IDENTIFIER values match between df.ts and df.metadata.\n")
         }
         
+        # Check for duplicates in mts_owner_id
+        dupes <- df.metadata$RAW_DATA_IDENTIFIER[duplicated(df.metadata$RAW_DATA_IDENTIFIER)]
+        
+        if (length(dupes) > 0) {
+          cat("Duplicate values found:\n")
+          print(unique(dupes))
+          stop("Script stopped due to duplicates.")
+        } else {
+          cat("OK\n")
+        }
+        
         
         if(vegetation.available == 'Yes'){
           colnames(df.vegetation.metadata) = str_to_upper(colnames(df.vegetation.metadata))
@@ -969,6 +980,16 @@ server <- function(input, output, session) {
           stop("Stopping: Some RAW_DATA_IDENTIFIER values in df.ts are missing in df.metadata")
         } else {
           cat("??? All RAW_DATA_IDENTIFIER values match between df.ts and df.metadata.\n")
+        }
+        # Check for duplicates in mts_owner_id
+        dupes <- df.metadata$RAW_DATA_IDENTIFIER[duplicated(df.metadata$RAW_DATA_IDENTIFIER)]
+        
+        if (length(dupes) > 0) {
+          cat("Duplicate values found:\n")
+          print(unique(dupes))
+          stop("Script stopped due to duplicates.")
+        } else {
+          cat("OK\n")
         }
         
         if(vegetation.available == 'Yes'){
@@ -1154,6 +1175,19 @@ server <- function(input, output, session) {
           cat("??? All RAW_DATA_IDENTIFIER values match between df.ts and df.metadata.\n")
         }
         
+        # Check for duplicates in mts_owner_id
+        dupes <- df.metadata$RAW_DATA_IDENTIFIER[duplicated(df.metadata$RAW_DATA_IDENTIFIER)]
+        
+        if (length(dupes) > 0) {
+          cat("Duplicate values found:\n")
+          print(unique(dupes))
+          stop("Script stopped due to duplicates.")
+        } else {
+          cat("OK\n")
+        }
+        
+        
+        
         if(vegetation.available == 'Yes'){
           colnames(df.vegetation.metadata) = str_to_upper(colnames(df.vegetation.metadata))
           colnames(df.vegetation.data) = str_to_upper(colnames(df.vegetation.data))
@@ -1288,6 +1322,17 @@ server <- function(input, output, session) {
           stop("Stopping: Some RAW_DATA_IDENTIFIER values in df.ts are missing in df.metadata")
         } else {
           cat("??? All RAW_DATA_IDENTIFIER values match between df.ts and df.metadata.\n")
+        }
+        
+        # Check for duplicates in mts_owner_id
+        dupes <- df.metadata$RAW_DATA_IDENTIFIER[duplicated(df.metadata$RAW_DATA_IDENTIFIER)]
+        
+        if (length(dupes) > 0) {
+          cat("Duplicate values found:\n")
+          print(unique(dupes))
+          stop("Script stopped due to duplicates.")
+        } else {
+          cat("OK\n")
         }
         
         if(vegetation.available == 'Yes'){
